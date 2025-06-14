@@ -40,9 +40,10 @@ class CrossAttentionBlock(nn.Module):
         # addin: [B, C, H, W] or [B, t, C, H, W]
         if self.kv_frames > 1:
             # B, t, C, H, W -> B, C, tH, W
-            addin = addin.permute(0, 2, 1, 3, 4).reshape(addin.shape[0], addin.shape[2], -1, addin.shape[3])
+            addin = addin.permute(0, 2, 1, 3, 4).reshape(addin.shape[0], addin.shape[2], -1, addin.shape[3]) # this isn't the case since kv_frames is 1.
         kv = self.kv_norm(addin).permute(0, 2, 3, 1).reshape(addin.shape[0], -1, addin.shape[1])  # [B, HW, C]
         kv = kv + self.kv_pos_emb
+        # print(f"kv shape: {kv.shape} || kv_pos_emb: {self.kv_pos_emb.shape}")
         q = self.q_norm(z).permute(0, 2, 3, 1).reshape(z.shape[0], -1, z.shape[1])  # [B, HW, C]
         q = q + self.q_pos_emb
 
@@ -118,6 +119,9 @@ class ConditionalEncoder(Encoder):
         for i, down_block in enumerate(self.down_blocks):
             sample = down_block(sample)
             if sample.shape[-1] <= self.max_att_resolution:
+                # print("calling cross att blocks!")
+                # print(f"cond feat len: {len(cond_features)}")
+                # print(f"sample shape: {sample.shape} || cond_features shape: {cond_features[i+1].shape}")
                 sample = self.cross_att_blocks[att_idx](sample, cond_features[i + 1])
                 att_idx += 1
 

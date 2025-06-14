@@ -1,3 +1,4 @@
+
 import copy
 import os
 import warnings
@@ -86,19 +87,34 @@ def get_dataloaders(args):
         'stepsize': args.video_stepsize,
         'segment_horizon': None,
     }
-    train_dataloader = SimpleRoboticDataLoaderv2(
-        parent_dir=args.dataset_path,
-        datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
-        batch_size=args.per_device_train_batch_size,
-        num_workers=args.dataloader_num_workers,
-        train=True,
-        maxsize=args.dataset_size,
-        image_size=args.resolution,
-        sthsth_root_path=args.sthsth_root_path,
-        **augmentation_args,
-        **segment_args,
-        load_action=args.action_conditioned,
-    )
+    if args.use_rewind:
+        train_dataloader = RewindRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.per_device_train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=True,
+            maxsize=args.dataset_size,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+            load_action=args.action_conditioned,
+        )
+    else:
+        train_dataloader = SimpleRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.per_device_train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=True,
+            maxsize=args.dataset_size,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+            load_action=args.action_conditioned,
+        )
     if args.use_eval_dataset:
         assert len(DATASET_NAMED_MIXES[args.oxe_data_mixes_type]) == 1
         eval_dataloader = EvalDataLoader(
@@ -110,18 +126,32 @@ def get_dataloaders(args):
             load_action=args.action_conditioned,
         )
     else:
-        eval_dataloader = SimpleRoboticDataLoaderv2(
-            parent_dir=args.dataset_path,
-            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
-            batch_size=args.per_device_eval_batch_size,
-            num_workers=args.dataloader_num_workers,
-            train=False,
-            image_size=args.resolution,
-            sthsth_root_path=args.sthsth_root_path,
-            **augmentation_args,
-            **segment_args,
-            load_action=args.action_conditioned,
-        )
+        if args.use_rewind:
+            eval_dataloader = RewindRoboticDataLoaderv2(
+                parent_dir=args.dataset_path,
+                datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+                batch_size=args.per_device_eval_batch_size,
+                num_workers=args.dataloader_num_workers,
+                train=False,
+                image_size=args.resolution,
+                sthsth_root_path=args.sthsth_root_path,
+                **augmentation_args,
+                **segment_args,
+                load_action=args.action_conditioned,
+            )
+        else:
+            eval_dataloader = SimpleRoboticDataLoaderv2(
+                parent_dir=args.dataset_path,
+                datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+                batch_size=args.per_device_eval_batch_size,
+                num_workers=args.dataloader_num_workers,
+                train=False,
+                image_size=args.resolution,
+                sthsth_root_path=args.sthsth_root_path,
+                **augmentation_args,
+                **segment_args,
+                load_action=args.action_conditioned,
+            )
     return train_dataloader, eval_dataloader
 
 
@@ -139,7 +169,7 @@ def get_tokenizer(args):
         ).eval()
         if args.context_length != vq_model.context_length:
             print(
-                f"[Warning] pretrained context length of vq_model mismatch, change from {vq_model.context_length} to {args.context_length}")
+                f"[Warning] pretrained context length of vq_model mismatch, change from {args.context_length} to {vq_model.context_length}")
             vq_model.set_context_length(args.context_length)
         vocab_size = vq_model.num_vq_embeddings + vq_model.num_dyn_embeddings
         if args.special_token:
@@ -303,6 +333,7 @@ def parse_args():
     parser.add_argument('--max_decode_batchsize', default=None, type=int)
     parser.add_argument('--eval_only', default=False, action='store_true')
     parser.add_argument('--log_gif_interval', default=10, type=int)
+    parser.add_argument('--use_rewind', default=False, action = 'store_true')
 
     args = parser.parse_args()
     args.model_type = args.config_name.split('/')[1]
@@ -312,8 +343,7 @@ def parse_args():
     if args.per_device_eval_batch_size is None:
         args.per_device_eval_batch_size = args.per_device_train_batch_size
 
-    assert not (args.action_conditioned and not args.special_token), \
-        "Action conditioned model must have special token enabled."
+    assert not (args.action_conditioned and not args.special_token), "Action conditioned model must have special token enabled."
 
     return args
 
@@ -467,6 +497,7 @@ def evaluate(args, accelerator, tokenizer, model, eval_dataloader, evaluator, co
             gathered_features = accelerator.gather(features)
             if accelerator.is_main_process:
                 gen_feats.append_torch(gathered_features)
+                # print(f"gen feats is finite?: {np.isnan(gen_feats).any() or np.isinf(real_feats)} || real_feats is finite?: {np.isnan(gen_feats).any() or np.isinf(real_feats)}")
                 print("current fvd", accelerator.unwrap_model(evaluator).compute_fvd(real_feats, gen_feats))
 
         if args.use_frame_metrics:
@@ -565,9 +596,9 @@ def start_train():
             with open(os.path.join(args.output_dir, "cmd.sh"), "w") as f:
                 f.write("python " + " ".join(sys.argv))
 
-            src_path = os.path.join(args.output_dir, 'src')
-            os.makedirs(src_path, exist_ok=True)
-            os.system(f"rsync -rv --exclude-from=.gitignore . {src_path}")
+            # src_path = os.path.join(args.output_dir, 'src') ## GARBAGE
+            # os.makedirs(src_path, exist_ok=True)
+            # os.system(f"rsync -rv --exclude-from=.gitignore . {src_path}")
 
     accelerator.wait_for_everyone()
 
@@ -674,8 +705,9 @@ def start_train():
     )
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
-    if accelerator.distributed_type == DistributedType.TPU:
-        model.tie_weights()
+    ## ==> DistributedType.TPU does not exist according to the accelerate docs. Commenting this out.
+    # if accelerator.distributed_type == DistributedType.TPU:
+    #     model.tie_weights()
 
     # Figure out how many steps we should save the Accelerator states
     checkpointing_steps = args.checkpointing_steps

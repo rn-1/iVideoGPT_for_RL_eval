@@ -14,91 +14,13 @@ import torchvision.transforms as transforms
 import math
 from .sthsth_dataloader import SomethingV2Dataset
 
-
-def get_base_stepsize(dataset_name):
-    stepsize = {
-        'fractal20220817_data': 3,
-        'kuka': 10,
-        'bridge': 5,
-        'taco_play': 15,
-        'jaco_play': 10,
-        'berkeley_cable_routing': 10,
-        'roboturk': 10,
-        'viola': 20,
-        'toto': 30,
-        'language_table': 10,
-        'columbia_cairlab_pusht_real': 10,
-        'stanford_kuka_multimodal_dataset_converted_externally_to_rlds': 20,
-        'stanford_hydra_dataset_converted_externally_to_rlds': 10,
-        'austin_buds_dataset_converted_externally_to_rlds': 20,
-        'nyu_franka_play_dataset_converted_externally_to_rlds': 3,
-        'maniskill_dataset_converted_externally_to_rlds': 20,
-        'furniture_bench_dataset_converted_externally_to_rlds': 10,
-        'ucsd_kitchen_dataset_converted_externally_to_rlds': 2,
-        'ucsd_pick_and_place_dataset_converted_externally_to_rlds': 3,
-        'austin_sailor_dataset_converted_externally_to_rlds': 20,
-        'bc_z': 10,
-        'utokyo_pr2_opening_fridge_converted_externally_to_rlds': 10,
-        'utokyo_pr2_tabletop_manipulation_converted_externally_to_rlds': 10,
-        'utokyo_xarm_pick_and_place_converted_externally_to_rlds': 10,
-        'utokyo_xarm_bimanual_converted_externally_to_rlds': 10,
-        'robo_net': 1,
-        'kaist_nonprehensile_converted_externally_to_rlds': 10,
-        'stanford_mask_vit_converted_externally_to_rlds': 1,  # no groundtruth value
-        'dlr_sara_pour_converted_externally_to_rlds': 10,
-        'dlr_sara_grid_clamp_converted_externally_to_rlds': 10,
-        'dlr_edan_shared_control_converted_externally_to_rlds': 5,
-        'asu_table_top_converted_externally_to_rlds': 12.5,
-        'iamlab_cmu_pickup_insert_converted_externally_to_rlds': 20,
-        'uiuc_d3field1': 1,
-        'uiuc_d3field2': 1,
-        'uiuc_d3field3': 1,
-        'uiuc_d3field4': 1,
-        'utaustin_mutex': 20,
-        'berkeley_fanuc_manipulation': 10,
-        'cmu_playing_with_food': 10,
-        'cmu_play_fusion': 5,
-        'cmu_stretch': 10,
-
-        # downstream tasks
-        'bair_robot_pushing': 1,
-        'vp2_robodesk': 1,
-        'vp2_robosuite': 1,
-    }
-    if dataset_name in stepsize:
-        return stepsize[dataset_name]
-    return 1
+from .simple_dataloader import get_base_stepsize, get_display_key
 
 
-def get_display_key(dataset_name):
-    key = {
-        'taco_play': 'rgb_static',
-        'roboturk': 'front_rgb',
-        'viola': 'agentview_rgb',
-        'berkeley_autolab_ur5': 'hand_image',
-        'language_table': 'rgb',
-        'berkeley_mvp_converted_externally_to_rlds': 'hand_image',
-        'berkeley_rpt_converted_externally_to_rlds': 'hand_image',
-        'stanford_robocook_converted_externally_to_rlds1': 'image_1',
-        'stanford_robocook_converted_externally_to_rlds2': 'image_2',
-        'stanford_robocook_converted_externally_to_rlds3': 'image_3',
-        'stanford_robocook_converted_externally_to_rlds4': 'image_4',
-        'uiuc_d3field1': 'image_1',
-        'uiuc_d3field2': 'image_2',
-        'uiuc_d3field3': 'image_3',
-        'uiuc_d3field4': 'image_4',
-
-        # downstream tasks
-        'bair_robot_pushing': 'aux1_image',
-        'vp2_robodesk': 'image',
-        'vp2_robosuite': 'image',
-    }
-    if dataset_name in key:
-        return key[dataset_name]
-    return 'image'
 
 
-class SimpleRoboticDatasetv2(data.Dataset):
+
+class RewindRoboticDatasetv2(data.Dataset):
     def __init__(
         self, parent_dir, dataset_name,
         # segment
@@ -396,14 +318,15 @@ class SimpleRoboticDatasetv2(data.Dataset):
     def __getitem__(self, item):
 
         # random flip
-        # random = np.random.randint(1,10)
+        random = np.random.randint(1,10)
         
         id = np.random.randint(self.size)
         episode = np.load(self.filenames[id])[self.display_key]
         action = np.load(self.filenames[id])['action'] if self.load_action else None
-        # if(random <= 5):
-        #     episode = np.flip(episode, axis = 0) # pray this works
-        #     action = -1*np.flip(action, axis = 0) if action is not None
+        if(random <= 5):
+            episode = np.flip(episode, axis = 0) # pray this works
+            action = -1*np.flip(action, axis = 0) if action is not None else None
+
         if self.dataset_name == 'tfds_robonet' and action is not None:
             new_row = np.array([0, 0, 0, 0, 0]).reshape(1, -1)
             action = np.append(action, new_row, axis=0)
@@ -424,7 +347,7 @@ class SimpleRoboticDatasetv2(data.Dataset):
         return self.size * 10000000  # infinity
 
 
-class MixRoboticDatasetv2(data.Dataset):
+class RewindMixRoboticDatasetv2(data.Dataset):
     def __init__(self, parent_dir, datasets, stepsize=1, sthsth_root_path=None, **dataset_args):
 
         # datasets: [(name, mix), ...]
@@ -437,7 +360,7 @@ class MixRoboticDatasetv2(data.Dataset):
             dataset_mix.append(mix)
         frac_step_size = 3
         self.datasets = [
-            SimpleRoboticDatasetv2(
+            RewindRoboticDatasetv2(
                 parent_dir, dataset_name,
                 # get the stepsize for each dataset, stepsize should be at least 1
                 stepsize=max(round(stepsize * get_base_stepsize(dataset_name) / frac_step_size), 1),
@@ -465,95 +388,7 @@ class MixRoboticDatasetv2(data.Dataset):
         return sum(self.dataset_sizes) * 100000000
 
 
-class SimpleRoboticDataLoaderv2(data.DataLoader):
+class RewindRoboticDataLoaderv2(data.DataLoader):
     def __init__(self, parent_dir, datasets, batch_size=2, num_workers=1, **dataset_args):
-        self.dataset = MixRoboticDatasetv2(parent_dir, datasets, **dataset_args)
-        super().__init__(self.dataset, batch_size=batch_size, num_workers=num_workers)
-
-
-class EvalDataset(data.Dataset):
-    def __init__(
-        self, dataset_name,
-        segment_length,
-        image_size=256,
-        load_action=False,
-    ):
-        self.image_size = image_size
-        self.dataset_name = dataset_name
-
-        self.segment_length = segment_length
-        self.load_action = load_action
-
-        if dataset_name == 'bair_robot_pushing':
-            parent_dir = yaml.load(open('DATASET.yaml'), Loader=yaml.FullLoader)['bair_test_dataset']
-            self.filenames = glob.glob(os.path.join(parent_dir, '*.npz'))
-            self.filenames.sort()
-        elif dataset_name == 'tfds_robonet':
-            parent_dir = yaml.load(open('DATASET.yaml'), Loader=yaml.FullLoader)['robonet_test_dataset']
-            self.filenames = glob.glob(os.path.join(parent_dir, '*.npz'))
-            self.filenames.sort()
-        elif dataset_name == 'vp2_robodesk':
-            parent_dir = yaml.load(open('DATASET.yaml'), Loader=yaml.FullLoader)['robodesk_dataset']
-            self.filenames = glob.glob(os.path.join(parent_dir, '*', 'validation*', '*.npz'))
-            self.filenames.sort()
-            self.filenames.sort()
-        elif dataset_name == 'vp2_robosuite':
-            parent_dir = yaml.load(open('DATASET.yaml'), Loader=yaml.FullLoader)['robosuite_dataset']
-            self.filenames = glob.glob(os.path.join(parent_dir, 'validation', '*.npz'))
-            self.filenames.sort()
-        else:
-            raise NotImplementedError
-
-        self.size = len(self.filenames)
-        self.display_key = get_display_key(dataset_name)
-        if self.size == 0:
-            raise ValueError(f"[EvalDataset] No test episodes found in {dataset_name}")
-        print(f"[EvalDataset] Find {self.size} test episodes in {dataset_name}")
-
-    def data_augmentation(self, images):
-        images = images / 255
-        if self.dataset_name == 'tfds_robonet':
-            images = F.center_crop(images, min(images.shape[2:]))
-        return F.resize(images, [self.image_size, self.image_size])
-
-    def get_segment(self, episode, action=None):
-        if 'vp2' in self.dataset_name:
-            start = np.random.randint(max(len(episode) - self.segment_length + 1, 1))
-        else:
-            start = 0  # for test on downstream video prediction tasks
-        images = [step for step in episode[start: start + self.segment_length]]
-        if action is not None:
-            actions = [action for action in action[start: start + self.segment_length]]
-        else:
-            actions = None
-        # if the episode is too short, repeat the last image
-        while len(images) < self.segment_length:
-            images.append(images[-1])
-            if action is not None:
-                actions.append(actions[-1])
-        return images, actions
-
-    def __getitem__(self, item):
-        episode = np.load(self.filenames[item])[self.display_key]
-        action = np.load(self.filenames[item])['action'] if self.load_action else None
-        if self.dataset_name == 'tfds_robonet' and action is not None:
-            new_row = np.array([0, 0, 0, 0, 0]).reshape(1, -1)
-            action = np.append(action, new_row, axis=0)
-        images, actions = self.get_segment(episode, action)
-        images = torch.Tensor(np.array(images)).permute(0, 3, 1, 2)  # T, H, W, C -> T, C, H, W
-        images = self.data_augmentation(images)
-
-        if self.load_action:
-            actions = torch.Tensor(np.array(actions))
-            return images, actions
-        else:
-            return images
-
-    def __len__(self):
-        return self.size
-
-
-class EvalDataLoader(data.DataLoader):
-    def __init__(self, dataset_name, segment_length, image_size, batch_size=2, num_workers=1, load_action=False, **dummy_args):
-        self.dataset = EvalDataset(dataset_name, segment_length, image_size, load_action)
+        self.dataset = RewindMixRoboticDatasetv2(parent_dir, datasets, **dataset_args)
         super().__init__(self.dataset, batch_size=batch_size, num_workers=num_workers)

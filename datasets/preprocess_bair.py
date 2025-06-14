@@ -60,8 +60,7 @@ for split in ["train", "test"]:
                 main_img = Image.frombytes('RGB', (64, 64), image_main_byte_str)
                 image_list.append(main_img)
                 main_image_np = np.array(main_img.getdata()).reshape((main_img.size[1], main_img.size[0], 3))
-                aux1_img = Image.frombytes('RGB', (64, 64), image_aux1_byte_str)
-                aux1_image_np = np.array(aux1_img.getdata()).reshape((aux1_img.size[1], aux1_img.size[0], 3))
+                aux1_img = Image.frombytes('RGB', (64, 64), image_aux1_byte_str                aux1_image_np = np.array(aux1_img.getdata()).reshape((aux1_img.size[1], aux1_img.size[0], 3))
                 action_np = np.array(action_list)
 
                 main_image_np_list.append(main_image_np)

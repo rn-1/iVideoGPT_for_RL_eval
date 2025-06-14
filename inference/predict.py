@@ -64,7 +64,7 @@ def predict(args, tokenizer, model, input, actions=None):
     generated_tokens = model.generate(
         gen_input.repeat(args.repeat_times, 1),
         **gen_kwargs,
-        pad_token_id=50256,  # this is out of vocabulary but suppressing warning
+        pad_token_id=50258,  # this is out of vocabulary but suppressing warning
         **({'action': actions.repeat(args.repeat_times, 1, 1)} if actions is not None else {}),
     )
 

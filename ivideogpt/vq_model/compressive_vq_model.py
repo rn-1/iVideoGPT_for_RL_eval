@@ -165,14 +165,23 @@ class CompressiveVQModel(ModelMixin, ConfigMixin):
     def tokenize(self, pixel_values: torch.FloatTensor, context_length: int = 0):
         assert context_length == self.context_length  # TODO: fix
 
+        if len(pixel_values.shape) == 4: # B is missing i think
+            # print(pixel_values.shape)
+            pixel_values = pixel_values.reshape(1, pixel_values.shape[0],pixel_values.shape[1], pixel_values.shape[2],pixel_values.shape[3])
+            # print(pixel_values.shape)
         B, T, C, H, W = pixel_values.shape
 
         context_frames = pixel_values[:, :context_length].reshape(-1, C, H, W)
         future_frames = pixel_values[:, context_length:].reshape(-1, C, H, W)
         future_length = T - context_length
 
+        # print(f"context_frames shape: {context_frames.shape}")
+        # print(f"future length: {future_length}")
+
         # encode context frames
         h, cond_features = self.encoder(context_frames, return_features=True)
+
+        # print(f"cond_features len after encoder: {len(cond_features)}")
         if self.context_length > 1:
             B = future_frames.shape[0] // future_length
             cond_features = [
@@ -188,6 +197,7 @@ class CompressiveVQModel(ModelMixin, ConfigMixin):
         h = self.quant_conv(h)
 
         # encode future frames conditioned on context
+        # print(f"future_frame shape: {future_frames[0].shape} || cond_feature shape: {cond_features[0].shape}")
         d = self.cond_encoder(future_frames, cond_features)
         p = self.patch_size
         d = d.permute(0, 2, 3, 1).unfold(1, p, p).unfold(2, p, p).permute(

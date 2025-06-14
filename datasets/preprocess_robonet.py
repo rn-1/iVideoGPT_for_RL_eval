@@ -25,7 +25,7 @@ def load_camera_imgs(cam_index, file_pointer, file_metadata, target_dims, start_
 
     images = np.zeros((n_load, old_height, old_width, 3), dtype=np.uint8)
     if encoding == 'mp4':
-        buf = io.BytesIO(cam_group['frames'][:].tostring())
+        buf = io.BytesIO(cam_group['frames'][:].tobytes())
         img_buffer = [img for t, img in enumerate(imageio.get_reader(buf, format='mp4'))]
     elif encoding == 'jpg':
         img_buffer = [cv2.imdecode(cam_group['frame{}'.format(t)][:], cv2.IMREAD_COLOR)[:, :, ::-1]
@@ -100,16 +100,26 @@ if __name__ == '__main__':
     file_list = os.listdir(args.hdf5_path)
     train_save_path = os.path.join(args.save_path, "train")
     test_save_path = os.path.join(args.save_path, "test")
+
+    print(f"TRAIN SAVE PATH: {train_save_path}\nTEST SAVE PATH: {test_save_path}\n")
     os.makedirs(train_save_path, exist_ok=True)
     os.makedirs(test_save_path, exist_ok=True)
 
+    finished_train = os.listdir(test_save_path)
+    finished_test = os.listdir(train_save_path)
+
     test_file_list = []
-    with open("datasets/robonet/robonet_testset_filenames.txt", 'r') as f:
+    with open("robonet/robonet_testset_filenames.txt", 'r') as f:
         for line in f:
             test_file_list.append(line.strip())
 
     for index, file_name in tqdm(enumerate(file_list)):
         if ".pkl" in file_name:
+            continue
+        
+        npz_name = file_name.replace('.hdf5','') + '.npz'
+        if (npz_name in finished_test) or (npz_name in finished_train):
+            # print(f"{file_name} already completed, skipping.")
             continue
 
         file_save_path = test_save_path if file_name in test_file_list else train_save_path

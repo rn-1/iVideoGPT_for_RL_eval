@@ -274,6 +274,7 @@ def parse_args():
     parser.add_argument('--balanced_loss', default=False, action='store_true')
     parser.add_argument('--selected_params', default=False, action='store_true')
     parser.add_argument('--no_aug', default=False, action='store_true')
+    parser.add_argument('--use_rewind', default = False, action = 'store_true')
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -336,9 +337,9 @@ def main():
             with open(os.path.join(args.output_dir, "cmd.sh"), "w") as f:
                 f.write("python " + " ".join(sys.argv))
 
-            src_path = os.path.join(args.output_dir, 'src')
-            os.makedirs(src_path, exist_ok=True)
-            os.system(f"rsync -rv --exclude-from=.gitignore . {src_path}")
+            # src_path = os.path.join(args.output_dir, 'src') ## GARBAGE
+            # os.makedirs(src_path, exist_ok=True)
+            # os.system(f"rsync -rv --exclude-from=.gitignore . {src_path}")
 
     #########################
     # MODELS and OPTIMIZER  #
@@ -483,29 +484,55 @@ def main():
         'stepsize': args.video_stepsize,
         'segment_horizon': args.segment_horizon,
     }
-    train_dataloader = SimpleRoboticDataLoaderv2(
-        parent_dir=args.dataset_path,
-        datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
-        batch_size=args.train_batch_size,
-        num_workers=args.dataloader_num_workers,
-        train=True,
-        maxsize=args.dataset_size,
-        image_size=args.resolution,
-        sthsth_root_path=args.sthsth_root_path,
-        **augmentation_args,
-        **segment_args,
-    )
-    eval_dataloader = SimpleRoboticDataLoaderv2(
-        parent_dir=args.dataset_path,
-        datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
-        batch_size=args.train_batch_size,
-        num_workers=args.dataloader_num_workers,
-        train=False,
-        image_size=args.resolution,
-        sthsth_root_path=args.sthsth_root_path,
-        **augmentation_args,
-        **segment_args,
-    )
+    if args.use_rewind:
+        print("using rewind dataloader!")
+        train_dataloader = RewindRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=True,
+            maxsize=args.dataset_size,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+        )
+        eval_dataloader = RewindRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=False,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+        )
+    else: 
+        train_dataloader = SimpleRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=True,
+            maxsize=args.dataset_size,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+        )
+        eval_dataloader = SimpleRoboticDataLoaderv2(
+            parent_dir=args.dataset_path,
+            datasets=DATASET_NAMED_MIXES[args.oxe_data_mixes_type],
+            batch_size=args.train_batch_size,
+            num_workers=args.dataloader_num_workers,
+            train=False,
+            image_size=args.resolution,
+            sthsth_root_path=args.sthsth_root_path,
+            **augmentation_args,
+            **segment_args,
+        )
 
     lr_scheduler = get_scheduler(
         args.lr_scheduler,

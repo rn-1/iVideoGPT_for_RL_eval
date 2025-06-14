@@ -69,6 +69,7 @@ class HeadModelWithAction(nn.Module):
         # ([0:255] scf     [0:255]) sdf             [0:15] sdf     [0:15] sdf   [0:15] sdf    [0:15] sdf(last one discarded)\
         # action[0]        action[1]              action[2]     action[3]
         device = inputs_token.device
+        # print(f"self.context: {self.context}\nself.segment_length:{self.segment_length}")
         token_per_dyna = ((max_new_tokens + 1) // (self.segment_length - self.context)) - 1
         B, T = inputs_token.size()
         action_embeds = self.action_linear(action)
